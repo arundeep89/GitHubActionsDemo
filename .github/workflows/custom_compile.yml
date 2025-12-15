@@ -1,35 +1,54 @@
 name: Custom Compile Workflow
 on:
-  pull_request:
+  pull_request_target:
     branches:
       - main
+
+permissions:
+  contents: read
+  issues: write
 
 jobs:
   compile:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: Checkout PR head (safe read-only)
+        # Checkout the PR head (from fork or same repo). We only read files/diff.
         uses: actions/checkout@v6
         with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.ref }}
+          token: ${{ secrets.PR_COMMENT_TOKEN }}
           fetch-depth: 0
-      
+
       - name: Get diff between feature-branch and main
         id: get_diff
         run: |
-          git fetch origin main
-          DIFF_OUTPUT=$(git diff origin/main...HEAD || echo "No differences found")
-          echo "diff<<EOF" >> $GITHUB_OUTPUT
-          echo "$DIFF_OUTPUT" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-      
+          # Fetch main from base repo and compute diff with PR head
+          git fetch origin main || git fetch ${{ github.event.pull_request.base.repo.full_name }} main
+          DIFF_OUTPUT=$(git diff origin/main...HEAD || true)
+          if [ -z "$DIFF_OUTPUT" ]; then
+            echo "has_diff=false" >> $GITHUB_OUTPUT
+            echo "diff<<EOF" >> $GITHUB_OUTPUT
+            echo "No differences found" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          else
+            echo "has_diff=true" >> $GITHUB_OUTPUT
+            echo "diff<<EOF" >> $GITHUB_OUTPUT
+            echo "$DIFF_OUTPUT" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          fi
+
       - name: Post diff output on PR
-        uses: thollander/actions-comment-pull-request@v3
+        if: steps.get_diff.outputs.has_diff == 'true'
+        uses: peter-evans/create-or-update-comment@v4
         with:
+          token: ${{ secrets.PR_COMMENT_TOKEN }}
+          issue-number: ${{ github.event.pull_request.number }}
           body: |
             ## Diff Output
-            
+
             **Changes between feature-branch and main:**
             ```
             ${{ steps.get_diff.outputs.diff }}
             ```
-
