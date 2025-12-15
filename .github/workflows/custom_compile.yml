@@ -1,0 +1,16 @@
+name: Custom Compile Workflow
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+      
+      - name: Run custom action
+        uses: ./.github/custom_action
+

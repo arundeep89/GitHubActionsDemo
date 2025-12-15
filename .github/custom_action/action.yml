@@ -1,0 +1,9 @@
+name: 'Custom Hello World Action'
+description: 'Prints hello world from custom action'
+runs:
+  using: 'composite'
+  steps:
+    - name: Print custom hello
+      shell: bash
+      run: echo "hello world from custom"
+
