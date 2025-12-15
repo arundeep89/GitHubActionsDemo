@@ -10,7 +10,27 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
       
-      - name: Run custom action
-        uses: ./.github/custom_action
+      - name: Get diff between feature-branch and main
+        id: get_diff
+        run: |
+          git fetch origin main
+          DIFF_OUTPUT=$(git diff origin/main...HEAD || echo "No differences found")
+          echo "diff<<EOF" >> $GITHUB_OUTPUT
+          echo "$DIFF_OUTPUT" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+      
+      - name: Post diff output on PR
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          body: |
+            ## Diff Output
+            
+            **Changes between feature-branch and main:**
+            ```
+            ${{ steps.get_diff.outputs.diff }}
+            ```
 
