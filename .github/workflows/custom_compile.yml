@@ -23,9 +23,8 @@ jobs:
           echo "EOF" >> $GITHUB_OUTPUT
       
       - name: Post diff output on PR
-        uses: peter-evans/create-or-update-comment@v4
+        uses: thollander/actions-comment-pull-request@v3
         with:
-          issue-number: ${{ github.event.pull_request.number }}
           body: |
             ## Diff Output
             
