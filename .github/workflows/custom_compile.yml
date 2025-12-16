@@ -26,8 +26,9 @@ jobs:
         run: |
           # Fetch main from base repo and compute diff with PR head
           git fetch origin main || git fetch ${{ github.event.pull_request.base.repo.full_name }} main
-          DIFF_OUTPUT=$(git diff origin/main...HEAD || true)
-          if [ -z "$DIFF_OUTPUT" ]; then
+          # Get formatted diff output
+          RAW_DIFF=$(git diff origin/main...HEAD || true)
+          if [ -z "$RAW_DIFF" ]; then
             echo "has_diff=false" >> $GITHUB_OUTPUT
             echo "diff<<EOF" >> $GITHUB_OUTPUT
             echo "No differences found" >> $GITHUB_OUTPUT
@@ -35,7 +36,27 @@ jobs:
           else
             echo "has_diff=true" >> $GITHUB_OUTPUT
             echo "diff<<EOF" >> $GITHUB_OUTPUT
-            echo "$DIFF_OUTPUT" >> $GITHUB_OUTPUT
+            # Process diff to show filename followed by changes
+            # Use awk to process the diff and format it
+            echo "$RAW_DIFF" | awk '
+              /^diff --git/ {
+                # Extract filename from "diff --git a/file b/file"
+                match($0, /b\/(.+)$/, arr)
+                if (arr[1] != "") {
+                  if (file != "") print ""
+                  file = arr[1]
+                  print file
+                }
+              }
+              /^index|^---|^\+\+\+|^@@|^new file mode|^deleted file mode|^similarity|^rename|^old mode|^new mode|^copy from|^copy to/ {
+                # Skip git metadata lines
+                next
+              }
+              /^\+|^-/ {
+                # Print lines that start with + or -
+                print $0
+              }
+            '
             echo "EOF" >> $GITHUB_OUTPUT
           fi
 
