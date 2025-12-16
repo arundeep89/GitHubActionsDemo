@@ -9,6 +9,10 @@ permissions:
   contents: read
   pull-requests: write
 
+concurrency:
+  group: pr-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   compile:
     runs-on: ubuntu-latest
@@ -17,8 +21,7 @@ jobs:
         # Checkout the PR head (from fork or same repo). We only read files/diff.
         uses: actions/checkout@v6
         with:
-          repository: ${{ github.event.pull_request.head.repo.full_name }}
-          ref: ${{ github.event.pull_request.head.ref }}
+          ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
 
       - name: Get diff between feature-branch and main
@@ -26,51 +29,96 @@ jobs:
         run: |
           # Fetch the latest base branch to compare against current state
           BASE_REF="${{ github.event.pull_request.base.ref }}"
-          git fetch origin "${BASE_REF}" || git fetch ${{ github.event.pull_request.base.repo.full_name }} "${BASE_REF}"
+          git fetch origin "${BASE_REF}"
           # Use the merge-base to find common ancestor and only show PR changes
           MERGE_BASE=$(git merge-base "HEAD" "origin/${BASE_REF}")
           git diff "${MERGE_BASE}..HEAD" > pr.diff
-          if [ ! -s pr.diff ]; then
-            echo "has_diff=false" >> $GITHUB_OUTPUT
-            echo "diff<<EOF" >> $GITHUB_OUTPUT
-            echo "No differences found" >> $GITHUB_OUTPUT
-            echo "EOF" >> $GITHUB_OUTPUT
-          else
-            echo "has_diff=true" >> $GITHUB_OUTPUT
-            echo "diff_file=pr.diff" >> $GITHUB_OUTPUT
-            echo "diff<<EOF" >> $GITHUB_OUTPUT
-            # Process diff to show filename followed by changes
-            awk '
-              /^diff --git/ {
-                match($0, /b\/(.+)$/, arr)
-                if (arr[1] != "") {
-                  if (file != "") print ""
-                  file = arr[1]
-                  print file
-                }
-              }
-              /^index|^---|^\+\+\+|^@@|^new file mode|^deleted file mode|^similarity|^rename|^old mode|^new mode|^copy from|^copy to/ {
-                # Skip git metadata lines
-                next
-              }
-              /^\+|^-/ {
-                # Print lines that start with + or -
-                print $0
-              }
-            ' >> $GITHUB_OUTPUT
-            echo "EOF" >> $GITHUB_OUTPUT
-          fi
+          echo "diff_file=pr.diff" >> "$GITHUB_OUTPUT"
 
-      - name: Post diff output on PR
-        if: steps.get_diff.outputs.has_diff == 'true'
-        uses: peter-evans/create-or-update-comment@v4
+      - name: Generate Copilot PR Review
+        id: copilot-review
+        uses: ./.github/custom_action/copilot_runner@main
         with:
-          issue-number: ${{ github.event.pull_request.number }}
-          body: |
-            ## Diff Output
+          copilot-token: ${{ secrets.COPILOT_CLI }}
+          model: claude-sonnet-4
+          agent: CodeReviewer
+          timeout: 120
+          output-file: copilot_pr_review.txt
+          include-output: true
+          extract-marker: "## 🤖 AI Test Review"
+          prompt: |
+            Review this PR against rules and system guidelines.
+            PR #${{ github.event.pull_request.number }}: "${{ github.event.pull_request.title }}"
+            Author: ${{ github.event.pull_request.user.login }}
+            Changes: ${{ github.event.pull_request.base.ref }} → ${{ github.event.pull_request.head.ref }}
+            The PR diff is in: pr.diff
 
-            **Changes between feature-branch and main:**
-            ```
-            ${{ steps.get_diff.outputs.diff }}
-            ```
+            Provide a structured review comment with violations, recommendations, and checklist status.
+
+      - name: Post review comment
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            
+            // Get the actual filename from copilot-runner output
+            const outputFile = '${{ steps.copilot-review.outputs.file }}';
+            console.log('Looking for output file:', outputFile);
+            
+            // Check if copilot review file exists
+            let reviewContent = '';
+            try {
+              reviewContent = fs.readFileSync(outputFile, 'utf8').trim();
+            } catch (error) {
+              console.log('Could not read output file:', error.message);
+            }
+            
+            // Only post comment if we have review content
+            if (!reviewContent) {
+              console.log('No review content generated, skipping comment.');
+              return;
+            }
+            
+            // Remove the marker line if it's still present (shared action includes it)
+            const markerLine = '## 🤖 AI Test Review';
+            if (reviewContent.startsWith(markerLine)) {
+              // Strip the marker line and any following empty lines
+              reviewContent = reviewContent.substring(markerLine.length).replace(/^\s+/, '');
+            }
+            
+            // Add stable header to review content
+            const review = `## 🤖 AI Test Review\n\n${reviewContent}`;
+            
+            // Find existing AI review comment
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            
+            const botComment = comments.data.find(comment =>
+              comment.body.includes('## 🤖 AI Test Review')
+            );
+            
+            if (botComment) {
+              // Update existing comment
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: review
+              });
+              console.log('Updated existing review comment');
+            } else {
+              // Create new comment
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: review
+              });
+              console.log('Created new review comment');
+            }
 
