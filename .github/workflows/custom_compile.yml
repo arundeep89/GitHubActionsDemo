@@ -1,4 +1,4 @@
-name: Custom Compile Workflow
+name: Copilot PR Review
 on:
   pull_request:
     branches:
@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  compile:
+  ai-review:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout PR head (safe read-only)
@@ -23,6 +23,17 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
+
+      - name: Ensure action files are available
+        run: |
+          # Verify action file exists, if not fetch from base branch
+          if [ ! -f .github/actions/copilot_runner/action.yml ]; then
+            echo "Action files not found in PR branch, fetching from base branch..."
+            BASE_REF="${{ github.event.pull_request.base.ref }}"
+            git fetch origin "${BASE_REF}"
+            git checkout "origin/${BASE_REF}" -- .github/actions/
+          fi
+          ls -la .github/actions/copilot_runner/action.yml || exit 1
 
       - name: Get diff between feature-branch and main
         id: get_diff
@@ -37,7 +48,7 @@ jobs:
 
       - name: Generate Copilot PR Review
         id: copilot-review
-        uses: ./.github/actions/copilot_runner@main
+        uses: ./.github/actions/copilot_runner
         with:
           copilot-token: ${{ secrets.COPILOT_CLI }}
           model: claude-sonnet-4
