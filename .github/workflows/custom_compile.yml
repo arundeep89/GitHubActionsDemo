@@ -5,8 +5,7 @@ on:
       - main
 
 permissions:
-  contents: read
-  issues: write
+  pull-requests: write
 
 jobs:
   compile:
@@ -48,7 +47,5 @@ jobs:
           body: |
             ## Diff Output
 
-            **Changes between feature-branch and main:**
-            ```
-            ${{ steps.get_diff.outputs.diff }}
-            ```
+            RUNNING NOW...
+
