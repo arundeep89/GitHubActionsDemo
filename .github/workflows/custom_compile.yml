@@ -14,8 +14,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  compile:
-    runs-on: ubuntu-latest
+  ai-review:
+    runs-on: [self-hosted, docker-runner]
     steps:
       - name: Checkout PR head (safe read-only)
         # Checkout the PR head (from fork or same repo). We only read files/diff.
@@ -37,7 +37,7 @@ jobs:
 
       - name: Generate Copilot PR Review
         id: copilot-review
-        uses: ./.github/custom_action/copilot_runner@main
+        uses: ./.github/custom_action/copilot_runner/action.yml
         with:
           copilot-token: ${{ secrets.COPILOT_CLI }}
           model: claude-sonnet-4
