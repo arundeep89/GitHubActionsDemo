@@ -24,21 +24,24 @@ jobs:
       - name: Get diff between feature-branch and main
         id: get_diff
         run: |
-          git fetch origin main || git fetch ${{ github.event.pull_request.base.repo.full_name }} main
-          RAW_DIFF=$(git diff origin/main...HEAD || true)
-          if [ -z "$RAW_DIFF" ]; then
+          # Fetch the latest base branch to compare against current state
+          BASE_REF="${{ github.event.pull_request.base.ref }}"
+          git fetch origin "${BASE_REF}" || git fetch ${{ github.event.pull_request.base.repo.full_name }} "${BASE_REF}"
+          # Use the merge-base to find common ancestor and only show PR changes
+          MERGE_BASE=$(git merge-base "HEAD" "origin/${BASE_REF}")
+          git diff "${MERGE_BASE}..HEAD" > pr.diff
+          if [ ! -s pr.diff ]; then
             echo "has_diff=false" >> $GITHUB_OUTPUT
             echo "diff<<EOF" >> $GITHUB_OUTPUT
             echo "No differences found" >> $GITHUB_OUTPUT
             echo "EOF" >> $GITHUB_OUTPUT
           else
             echo "has_diff=true" >> $GITHUB_OUTPUT
+            echo "diff_file=pr.diff" >> $GITHUB_OUTPUT
             echo "diff<<EOF" >> $GITHUB_OUTPUT
             # Process diff to show filename followed by changes
-            # Use awk to process the diff and format it, redirect output to GITHUB_OUTPUT
-            echo "$RAW_DIFF" | awk '
+            awk '
               /^diff --git/ {
-                # Extract filename from "diff --git a/file b/file"
                 match($0, /b\/(.+)$/, arr)
                 if (arr[1] != "") {
                   if (file != "") print ""
