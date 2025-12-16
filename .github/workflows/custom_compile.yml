@@ -14,8 +14,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  ai-review:
-    runs-on: [self-hosted, docker-runner]
+  compile:
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout PR head (safe read-only)
         # Checkout the PR head (from fork or same repo). We only read files/diff.
