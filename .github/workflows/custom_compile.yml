@@ -19,7 +19,7 @@ jobs:
     steps:
       - name: Checkout PR head (safe read-only)
         # Checkout the PR head (from fork or same repo). We only read files/diff.
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
@@ -37,7 +37,7 @@ jobs:
 
       - name: Generate Copilot PR Review
         id: copilot-review
-        uses: ./.github/custom_action/copilot_runner
+        uses: ./.github/custom_action/copilot_runner/
         with:
           copilot-token: ${{ secrets.COPILOT_CLI }}
           model: claude-sonnet-4
