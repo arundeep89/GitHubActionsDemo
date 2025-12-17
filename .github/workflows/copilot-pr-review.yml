@@ -53,7 +53,7 @@ jobs:
           copilot-token: ${{ secrets.COPILOT_CLI }}
           model: claude-sonnet-4
           agent: CodeReviewer
-          timeout: 120
+          timeout: 300
           output-file: copilot_pr_review.txt
           include-output: true
           extract-marker: "## 🤖 AI Test Review"
