@@ -14,124 +14,124 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  copilot-review:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout PR head (safe read-only)
-        # Checkout the PR head (from fork or same repo). We only read files/diff.
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          fetch-depth: 0
+  # copilot-review:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Checkout PR head (safe read-only)
+  #       # Checkout the PR head (from fork or same repo). We only read files/diff.
+  #       uses: actions/checkout@v4
+  #       with:
+  #         ref: ${{ github.event.pull_request.head.sha }}
+  #         fetch-depth: 0
 
-      - name: Ensure action files are available
-        run: |
-          # Verify action file exists, if not fetch from base branch
-          if [ ! -f .github/actions/copilot_runner/action.yml ]; then
-            echo "Action files not found in PR branch, fetching from base branch..."
-            BASE_REF="${{ github.event.pull_request.base.ref }}"
-            git fetch origin "${BASE_REF}"
-            git checkout "origin/${BASE_REF}" -- .github/actions/
-          fi
-          ls -la .github/actions/copilot_runner/action.yml || exit 1
+  #     - name: Ensure action files are available
+  #       run: |
+  #         # Verify action file exists, if not fetch from base branch
+  #         if [ ! -f .github/actions/copilot_runner/action.yml ]; then
+  #           echo "Action files not found in PR branch, fetching from base branch..."
+  #           BASE_REF="${{ github.event.pull_request.base.ref }}"
+  #           git fetch origin "${BASE_REF}"
+  #           git checkout "origin/${BASE_REF}" -- .github/actions/
+  #         fi
+  #         ls -la .github/actions/copilot_runner/action.yml || exit 1
 
-      - name: Get diff between feature-branch and main
-        id: get_diff
-        run: |
-          # Fetch the latest base branch to compare against current state
-          BASE_REF="${{ github.event.pull_request.base.ref }}"
-          git fetch origin "${BASE_REF}"
-          # Use the merge-base to find common ancestor and only show PR changes
-          MERGE_BASE=$(git merge-base "HEAD" "origin/${BASE_REF}")
-          git diff "${MERGE_BASE}..HEAD" > pr.diff
-          echo "diff_file=pr.diff" >> "$GITHUB_OUTPUT"
+  #     - name: Get diff between feature-branch and main
+  #       id: get_diff
+  #       run: |
+  #         # Fetch the latest base branch to compare against current state
+  #         BASE_REF="${{ github.event.pull_request.base.ref }}"
+  #         git fetch origin "${BASE_REF}"
+  #         # Use the merge-base to find common ancestor and only show PR changes
+  #         MERGE_BASE=$(git merge-base "HEAD" "origin/${BASE_REF}")
+  #         git diff "${MERGE_BASE}..HEAD" > pr.diff
+  #         echo "diff_file=pr.diff" >> "$GITHUB_OUTPUT"
 
-      - name: Generate Copilot PR Review
-        id: copilot-review
-        uses: ./.github/actions/copilot_runner
-        with:
-          copilot-token: ${{ secrets.COPILOT_CLI }}
-          model: claude-sonnet-4
-          agent: CodeReviewer
-          timeout: 300
-          output-file: copilot_pr_review.txt
-          include-output: true
-          extract-marker: "## 🤖 AI Test Review"
-          prompt: |
-            Review this PR against rules and system guidelines.
-            PR #${{ github.event.pull_request.number }}: "${{ github.event.pull_request.title }}"
-            Author: ${{ github.event.pull_request.user.login }}
-            Changes: ${{ github.event.pull_request.base.ref }} → ${{ github.event.pull_request.head.ref }}
-            The PR diff is in: pr.diff
+  #     - name: Generate Copilot PR Review
+  #       id: copilot-review
+  #       uses: ./.github/actions/copilot_runner
+  #       with:
+  #         copilot-token: ${{ secrets.COPILOT_CLI }}
+  #         model: claude-sonnet-4
+  #         agent: CodeReviewer
+  #         timeout: 300
+  #         output-file: copilot_pr_review.txt
+  #         include-output: true
+  #         extract-marker: "## 🤖 AI Test Review"
+  #         prompt: |
+  #           Review this PR against rules and system guidelines.
+  #           PR #${{ github.event.pull_request.number }}: "${{ github.event.pull_request.title }}"
+  #           Author: ${{ github.event.pull_request.user.login }}
+  #           Changes: ${{ github.event.pull_request.base.ref }} → ${{ github.event.pull_request.head.ref }}
+  #           The PR diff is in: pr.diff
 
-            Provide a structured review comment with violations, recommendations, and checklist status.
+  #           Provide a structured review comment with violations, recommendations, and checklist status.
 
-      - name: Post Copilot review comment
-        if: always()
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const fs = require('fs');
+  #     - name: Post Copilot review comment
+  #       if: always()
+  #       uses: actions/github-script@v7
+  #       with:
+  #         github-token: ${{ secrets.GITHUB_TOKEN }}
+  #         script: |
+  #           const fs = require('fs');
             
-            // Get the actual filename from copilot-runner output
-            const outputFile = '${{ steps.copilot-review.outputs.file }}';
-            console.log('Looking for output file:', outputFile);
+  #           // Get the actual filename from copilot-runner output
+  #           const outputFile = '${{ steps.copilot-review.outputs.file }}';
+  #           console.log('Looking for output file:', outputFile);
             
-            // Check if copilot review file exists
-            let reviewContent = '';
-            try {
-              reviewContent = fs.readFileSync(outputFile, 'utf8').trim();
-            } catch (error) {
-              console.log('Could not read output file:', error.message);
-            }
+  #           // Check if copilot review file exists
+  #           let reviewContent = '';
+  #           try {
+  #             reviewContent = fs.readFileSync(outputFile, 'utf8').trim();
+  #           } catch (error) {
+  #             console.log('Could not read output file:', error.message);
+  #           }
             
-            // Only post comment if we have review content
-            if (!reviewContent) {
-              console.log('No review content generated, skipping comment.');
-              return;
-            }
+  #           // Only post comment if we have review content
+  #           if (!reviewContent) {
+  #             console.log('No review content generated, skipping comment.');
+  #             return;
+  #           }
             
-            // Remove the marker line if it's still present (shared action includes it)
-            const markerLine = '## 🤖 AI Test Review';
-            if (reviewContent.startsWith(markerLine)) {
-              // Strip the marker line and any following empty lines
-              reviewContent = reviewContent.substring(markerLine.length).replace(/^\s+/, '');
-            }
+  #           // Remove the marker line if it's still present (shared action includes it)
+  #           const markerLine = '## 🤖 AI Test Review';
+  #           if (reviewContent.startsWith(markerLine)) {
+  #             // Strip the marker line and any following empty lines
+  #             reviewContent = reviewContent.substring(markerLine.length).replace(/^\s+/, '');
+  #           }
             
-            // Add stable header to review content
-            const review = `## 🔵 GitHub Copilot Review\n\n${reviewContent}`;
+  #           // Add stable header to review content
+  #           const review = `## 🔵 GitHub Copilot Review\n\n${reviewContent}`;
             
-            // Find existing AI review comment
-            const comments = await github.rest.issues.listComments({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-            });
+  #           // Find existing AI review comment
+  #           const comments = await github.rest.issues.listComments({
+  #             owner: context.repo.owner,
+  #             repo: context.repo.repo,
+  #             issue_number: context.issue.number,
+  #           });
             
-            const botComment = comments.data.find(comment =>
-              comment.body.includes('## 🔵 GitHub Copilot Review')
-            );
+  #           const botComment = comments.data.find(comment =>
+  #             comment.body.includes('## 🔵 GitHub Copilot Review')
+  #           );
             
-            if (botComment) {
-              // Update existing comment
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: botComment.id,
-                body: review
-              });
-              console.log('Updated existing Copilot review comment');
-            } else {
-              // Create new comment
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                body: review
-              });
-              console.log('Created new Copilot review comment');
-            }
+  #           if (botComment) {
+  #             // Update existing comment
+  #             await github.rest.issues.updateComment({
+  #               owner: context.repo.owner,
+  #               repo: context.repo.repo,
+  #               comment_id: botComment.id,
+  #               body: review
+  #             });
+  #             console.log('Updated existing Copilot review comment');
+  #           } else {
+  #             // Create new comment
+  #             await github.rest.issues.createComment({
+  #               owner: context.repo.owner,
+  #               repo: context.repo.repo,
+  #               issue_number: context.issue.number,
+  #               body: review
+  #             });
+  #             console.log('Created new Copilot review comment');
+  #           }
 
   gemini-review:
     runs-on: ubuntu-latest
