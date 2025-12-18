@@ -1,0 +1,137 @@
+name: "Gemini Runner"
+description: "Generic Gemini CLI runner: installs CLI, executes a prompt with timeout, optionally publishes output."
+inputs:
+  gemini-api-key:
+    description: "Gemini API key (e.g. secrets.GEMINI_API_KEY)."
+    required: true
+  timeout:
+    description: "Seconds before command is terminated."
+    required: false
+    default: "120"
+  include-output:
+    description: "Append output to job summary if true."
+    required: false
+    default: "true"
+  prompt:
+    description: "Prompt passed to Gemini CLI."
+    required: false
+    default: "Provide a concise analysis of the context supplied by previous steps."
+  prompt-file:
+    description: "Optional path to a file whose contents will be used as the prompt (overrides prompt)."
+    required: false
+    default: ""
+  output-file:
+    description: "Base filename for output (timestamp will always be appended before extension)."
+    required: false
+    default: "gemini_output.txt"
+  model:
+    description: "Gemini model to use (e.g. gemini-2.5-pro, gemini-2.5-flash)."
+    required: false
+    default: ""
+  extract-marker:
+    description: "Optional text marker to extract content from (e.g. '## 🤖 AI Test Review'). If set, only content from this marker onwards is returned."
+    required: false
+    default: ""
+outputs:
+  raw:
+    description: "Raw Gemini CLI output."
+    value: ${{ steps.run-prompt.outputs.raw }}
+  file:
+    description: "Final output file name (if written)."
+    value: ${{ steps.run-prompt.outputs.file }}
+runs:
+  using: "composite"
+  steps:
+    - name: Install Gemini CLI
+      shell: bash
+      run: sudo npm install -g @google/gemini-cli@latest
+
+    - name: Run Gemini prompt
+      id: run-prompt
+      shell: bash
+      env:
+        GEMINI_API_KEY: ${{ inputs.gemini-api-key }}
+        INPUT_TIMEOUT: ${{ inputs.timeout }}
+        INPUT_INCLUDE_OUTPUT: ${{ inputs.include-output }}
+        INPUT_PROMPT: ${{ inputs.prompt }}
+        INPUT_PROMPT_FILE: ${{ inputs.prompt-file }}
+        INPUT_OUTPUT_FILE: ${{ inputs.output-file }}
+        INPUT_MODEL: ${{ inputs.model }}
+        INPUT_EXTRACT_MARKER: ${{ inputs.extract-marker }}
+      run: |
+        echo "Verifying Gemini CLI installation"
+        gemini --version || echo "Gemini version check failed"
+
+        # Determine final prompt source
+        if [ -n "$INPUT_PROMPT_FILE" ]; then
+          if [ -f "$INPUT_PROMPT_FILE" ]; then
+            echo "Using prompt file: $INPUT_PROMPT_FILE"
+            PROMPT_CONTENT="$(cat "$INPUT_PROMPT_FILE")"
+          else
+            echo "Prompt file not found: $INPUT_PROMPT_FILE" >&2
+            exit 1
+          fi
+        else
+            PROMPT_CONTENT="$INPUT_PROMPT"
+        fi
+
+        # Always append timestamp to output filename
+        BASE_OUT="$INPUT_OUTPUT_FILE"
+        TS=$(date +%Y%m%d%H%M%S)
+        if [[ "$BASE_OUT" == *.* ]]; then
+          NAME_NO_EXT="${BASE_OUT%.*}"
+          EXT="${BASE_OUT##*.}"
+          FINAL_OUT="${NAME_NO_EXT}-${TS}.${EXT}"
+        else
+          FINAL_OUT="${BASE_OUT}-${TS}"
+        fi
+
+        # Build gemini command arguments array
+        GEMINI_ARGS=()
+        if [ -n "$INPUT_MODEL" ]; then
+          GEMINI_ARGS+=("-m" "$INPUT_MODEL")
+          echo "Using model: $INPUT_MODEL"
+        fi
+
+        echo "Executing prompt (timeout=$INPUT_TIMEOUT) -> $FINAL_OUT"
+        set +e
+        # Use -p flag for non-interactive mode (headless/scripting)
+        timeout "$INPUT_TIMEOUT" gemini "${GEMINI_ARGS[@]}" -p "$PROMPT_CONTENT" > "${FINAL_OUT}.raw"
+        exit_code=$?
+        set -e
+        if [ $exit_code -ne 0 ]; then
+          echo "Gemini CLI exited with code $exit_code (timeout or error)."
+        fi
+        
+        # Extract content from marker if specified
+        if [ -n "$INPUT_EXTRACT_MARKER" ]; then
+          if grep -q "$INPUT_EXTRACT_MARKER" "${FINAL_OUT}.raw"; then
+            sed -n "/$INPUT_EXTRACT_MARKER/,\$p" "${FINAL_OUT}.raw" > "$FINAL_OUT"
+            echo "Extracted content from marker: $INPUT_EXTRACT_MARKER"
+          else
+            # Fallback: use full output if marker not found
+            cp "${FINAL_OUT}.raw" "$FINAL_OUT"
+            echo "Warning: Could not find marker '$INPUT_EXTRACT_MARKER', using full output"
+          fi
+        else
+          # No marker specified, use full output
+          mv "${FINAL_OUT}.raw" "$FINAL_OUT"
+        fi
+        
+        UNIQUE_DELIM="__GEMINI_RAW_$(date +%s%N)__"
+        echo "Using unique delimiter $UNIQUE_DELIM for multi-line output"
+        {
+          printf 'raw<<%s\n' "$UNIQUE_DELIM"
+          cat "$FINAL_OUT"
+          printf '\n%s\n' "$UNIQUE_DELIM"
+        } >> "$GITHUB_OUTPUT"
+
+        echo "file=$FINAL_OUT" >> "$GITHUB_OUTPUT"
+
+        if [ "$INPUT_INCLUDE_OUTPUT" = "true" ]; then
+          echo "### Gemini CLI Output ($FINAL_OUT)" >> "$GITHUB_STEP_SUMMARY"
+          cat "$FINAL_OUT" >> "$GITHUB_STEP_SUMMARY"
+        fi
+
+        cat "$FINAL_OUT" || true
+
