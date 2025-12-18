@@ -132,6 +132,22 @@ runs:
           mv "${FINAL_OUT}.raw" "$FINAL_OUT"
         fi
 
+        # Filter out startup metrics, debug logs, and telemetry
+        if [ -f "$FINAL_OUT" ]; then
+          FILTERED_OUT="${FINAL_OUT}.filtered"
+          
+          # Remove lines matching various debug/telemetry patterns
+          grep -vE '^\[STARTUP\]|^\[DEBUG\]|^\[TELEMETRY\]|^Recording metric|^duration:' "$FINAL_OUT" > "$FILTERED_OUT" || true
+          
+          # Remove consecutive empty lines (reduce to single empty line)
+          cat -s "$FILTERED_OUT" > "${FILTERED_OUT}.tmp" && mv "${FILTERED_OUT}.tmp" "$FILTERED_OUT"
+          
+          # Replace original with filtered version
+          mv "$FILTERED_OUT" "$FINAL_OUT"
+          
+          echo "Filtered debug/telemetry logs from output"
+        fi
+
         # Verify output file exists
         if [ ! -f "$FINAL_OUT" ]; then
           echo "Warning: Output file $FINAL_OUT was not created, creating empty file" >&2
