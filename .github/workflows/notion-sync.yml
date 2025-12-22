@@ -1,0 +1,22 @@
+name: Sync README to Notion
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'README.md' # Triggers only when README.md changes
+
+jobs:
+  push_readme_to_notion:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Push README to Notion
+        uses: agonzalezl/readme-to-notion-action@v0.2.0
+        with:
+          notion_token: ${{ secrets.NOTION_TOKEN }}
+          notion_page_id: ${{ secrets.NOTION_PAGE_ID }}
+          # Optional: specify a different markdown file if needed
+          # markdown_file: 'docs/MyDoc.md'

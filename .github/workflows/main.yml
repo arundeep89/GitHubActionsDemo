@@ -3,6 +3,7 @@ on:
   push:
 jobs:
   say-hello:
+    if: false
     runs-on: ubuntu-latest
     steps:
       - name: Say Hello

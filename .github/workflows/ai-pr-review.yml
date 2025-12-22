@@ -15,6 +15,7 @@ concurrency:
 
 jobs:
   copilot-review:
+    if: false
     runs-on: ubuntu-latest
     steps:
       - name: Checkout PR head (safe read-only)
@@ -134,6 +135,7 @@ jobs:
             }
 
   gemini-review:
+    if: false
     runs-on: ubuntu-latest
     steps:
       - name: Checkout PR head (safe read-only)
