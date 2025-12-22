@@ -1,17 +1,22 @@
-name: hello-world-example
+name: Sync README to Notion
+
 on:
   push:
+    branches:
+      - main
+    paths:
+      - 'README.md' # Triggers only when README.md changes
+
 jobs:
-  say-hello:
-    if: false
+  push_readme_to_notion:
     runs-on: ubuntu-latest
     steps:
-      - name: Say Hello
-        run: echo "Hello world!"
-      - name: Do stuff
-        run: |
-          echo "Step 1..."
-          echo "Step 2..."
-          echo "Step 3..."
-      - name: Say Goodbye
-        run: echo "Goodbye!"
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Push README to Notion
+        uses: agonzalezl/readme-to-notion-action@v0.2.0
+        with:
+          notion_token: ${{ secrets.NOTION_TOKEN }}
+          notion_page_id: ${{ secrets.NOTION_PAGE_ID }}
+          # Optional: specify a different markdown file if needed
+          # markdown_file: 'docs/MyDoc.md'
