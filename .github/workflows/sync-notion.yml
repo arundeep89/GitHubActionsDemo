@@ -5,7 +5,7 @@ on:
     branches:
       - 'main'
     paths:
-      - './README.md'
+      - 'README.md'
   workflow_dispatch: # Allow manual trigger
 
 jobs:
@@ -18,6 +18,6 @@ jobs:
       - name: Upload to Notion
         uses: agonzalezl/readme-to-notion-action@88b6cb8eea354ac61c589f540e40cacadf0c8ecb
         with:
-          file-path: './README.md'
+          file-path: 'README.md'
           notion-token: ${{ secrets.NOTION_TOKEN }}
           notion-page-id: ${{ secrets.NOTION_PAGE_ID }}
